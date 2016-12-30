@@ -1,0 +1,345 @@
+
+-- (a)
+-- Display the name of the customer who has purchased the most cars from Archie’s Luxury Motors.
+
+SELECT 	C.name
+FROM	Customer C, SalesTransaction ST
+WHERE	C.custID = ST.custID
+GROUP BY C.name
+HAVING COUNT(ST.custid) =
+				(SELECT MAX(COUNT(custid))
+				FROM	SalesTransaction
+				GROUP BY custID);
+
+SS:
+
+NAME
+--------------------
+Sean Knight				
+				
+
+				
+-- (b)
+-- For each sales agent, display the total number of sales they have made thus far. Order by number of sales decreasing.
+
+SELECT		SA.agentID, SA.name, NVL(COUNT(ST.vin), 0) AS "Number of Sales"
+FROM 		SalesAgent SA, SalesTransaction ST
+WHERE		SA.agentID = ST.agentID(+)
+GROUP BY	SA.agentID, SA.name
+ORDER BY 	"Number of Sales" DESC;
+
+SS:
+
+AGENTID    NAME                                               Number of Sales
+---------- -------------------------------------------------- ---------------
+5          Jack Thompson                                                    7
+3          Ian Anne                                                         6
+6          Paul Pogba                                                       5
+9          Marco Reus                                                       5
+13         Fernando Llorente                                                5
+4          Paul Tonis                                                       5
+11         Arturo Vidal                                                     5
+12         Mattia Destro                                                    5
+1          Mark Licciardi                                                   5
+14         Antonio Cassano                                                  5
+10         Claudio Marchisio                                                4
+2          Michael Bruce                                                    4
+7          Marco Verratti                                                   4
+8          Daniele Rugani                                                   1
+15         Pierre-Emerick Aubameyang                                        0
+
+15 rows selected.
+
+
+
+-- (c)
+-- For each month in 2014, display the total profit (i.e. using the attributes purchasedPrice and agreedPrice) generated from car sales only. Do not consider any discounts.
+
+SELECT	to_char(dateOfSale, 'MON'), NVL(SUM(ST.agreedPrice - C.purchasedPrice), 0) AS "Total Profit"
+FROM 	SalesTransaction ST, Car C
+WHERE 	ST.VIN = C.VIN
+AND 	to_char(dateOfSale, 'YYYY') = '2014'
+GROUP BY to_char(dateOfSale, 'MON')
+ORDER BY "Total Profit" DESC;
+
+SS:
+
+TO_ Total Profit
+--- ------------
+JAN        17500
+JUL        15000
+FEB        13000
+AUG        13000
+MAY        12500
+SEP        10000
+JUN         4000
+APR         4000
+NOV         3000
+OCT         3000
+DEC         2500
+MAR         2000
+
+12 rows selected.
+
+
+-- (d)
+-- Display the details (i.e. Manufacturer name, model name, type) of the top selling European car model.
+
+SELECT 	MU.name, MO.name, MO.type, COUNT(*) AS "Times Sold"
+FROM 	Model MO, Manufacturer MU, Car C, SalesTransaction ST
+WHERE 	MU.manufacturerID = MO.manufacturerID
+AND 	MO.modelNo = C.ModelNo
+AND 	C.VIN = ST.VIN
+AND 	MU.region = 'EUROPE'
+GROUP BY MU.name, MO.name, MO.type
+HAVING COUNT(*) =
+				(SELECT MAX(COUNT(*))
+				FROM 	Model MO, Manufacturer MU, Car C, SalesTransaction ST
+				WHERE 	MU.manufacturerID = MO.manufacturerID
+				AND 	MO.modelNo = C.ModelNo
+				AND 	C.VIN = ST.VIN
+				AND 	MU.region = 'EUROPE'
+				GROUP BY MU.name, MO.name, MO.type);
+				
+SS:
+
+NAME                 NAME                 TYPE                 Times Sold
+-------------------- -------------------- -------------------- ----------
+Audi                 R8                   COUPE                         6
+			
+
+--(e)
+-- Display the details of the best junior sales agent (i.e. ID, Name, DOB) who is under the age of 25, in terms of their average negotiation profit (consider the askingPrice and agreedPrice attributes). The agent returned must have at least three sales to their name. 
+
+
+SELECT	SA.agentID, SA.name, SA.dob, AVG(ST.agreedPrice - C.askingPrice) AS "Average Negotiation Profit"
+FROM	SalesAgent SA, Car C, SalesTransaction ST
+WHERE	SA.agentid = ST.agentid
+AND 	C.vin = ST.vin							
+GROUP BY SA.agentID, SA.name, SA.dob
+HAVING AVG(ST.agreedPrice - C.askingPrice) = 
+											(SELECT MAX (AVG(ST.agreedPrice - C.askingPrice))
+											 FROM	SalesAgent SA, Car C, SalesTransaction ST
+										     WHERE	SA.agentid = ST.agentid
+											 AND 	C.vin = ST.vin
+											 AND 	months_between(SYSDATE, SA.dob) < 300
+											 AND	SA.agentID IN (
+																   SELECT agentID
+																   FROM JuniorAgent)
+											 AND 	SA.agentID IN (
+																   SELECT agentID
+																   FROM SalesTransaction
+																   GROUP BY agentID
+																   HAVING COUNT(*) >= 3)
+											GROUP BY SA.agentID, SA.name, SA.dob);	
+											
+SS:
+
+AGENTID    NAME                                               DOB       Average Negotiation Profit
+---------- -------------------------------------------------- --------- --------------------------
+6          Paul Pogba                                         15-MAR-93                       1400
+
+
+
+--(f)
+-- What is the most common car colour that junior agents sold in the month of January 2014?
+
+SELECT CC.colour
+FROM CarColour CC, Car C, SalesTransaction ST
+WHERE CC.vin = C.vin
+AND C.vin = ST.vin
+AND to_char(ST.dateOfSale, 'MON-YYYY') = 'JAN-2014'
+AND ST.agentID IN
+				  (SELECT agentID FROM JuniorAgent)
+GROUP BY CC.colour
+HAVING COUNT(*) = (
+					SELECT MAX(COUNT(*))
+					FROM CarColour CC, Car C, SalesTransaction ST
+					WHERE CC.vin = C.vin
+					AND C.vin = ST.vin
+					AND to_char(ST.dateOfSale, 'MON-YYYY') = 'JAN-2014'
+					AND ST.agentID IN
+									  (SELECT agentID FROM JuniorAgent)
+					GROUP BY CC.colour);	
+					
+SS:
+
+COLOUR
+--------------------
+White
+
+
+
+--(g)
+-- Display the total profit to date for Archie’s Luxury Motors. Note that you must take into consideration all car sales (ignoring unsold cars as they may be sold at a later date) and viewing party shows, and any VIP discounts that may apply. Do not subtract any commission owed to the senior sales agents.
+
+--Notes to demonstrators:
+	-- Ensure that students are aware of the difference between profit and revenue!
+	-- The total profit is the sum of 4 figures:
+				--Profits from non-VIP car sales
+				--Profits from VIP Car Sales where the agreedPrice is at least $50,000 (must apply the 5% discount)
+				--Profits from VIP Car Sales where the agreedPrice is less than $50,000 (no discount applies)
+				--Profits from viewing party shows (summing amountPaid)
+	--NVL must be in each subquery (we cannot assume each component has a value)
+	
+
+SELECT (R1.nonVIPSales + R2.VIPAfterDiscount + R3.VIPNoDiscount + R4.ViewingPartyProfit) AS "Total Profit"		
+FROM (SELECT NVL(SUM(ST.agreedPrice - CA.purchasedPrice),0) AS nonVIPSales
+	  FROM 		SalesTransaction ST, Car CA, Customer CU
+	  WHERE 	ST.VIN = CA.VIN
+	  AND		ST.custID = CU.custID
+	  AND 		CU.type = 'REGULAR')  R1,
+	 (SELECT NVL(SUM((ST.agreedPrice - CA.purchasedPrice) * 0.95 ),0) AS VIPAfterDiscount
+	  FROM 		SalesTransaction ST, Car CA, Customer CU
+	  WHERE 	ST.VIN = CA.VIN
+	  AND		ST.custID = CU.custID
+	  AND 		CU.type = 'VIP'
+	  AND 		ST.agreedPrice >= 50000)  R2,
+	  (SELECT NVL(SUM(ST.agreedPrice - CA.purchasedPrice),0) AS VIPNoDiscount
+	  FROM 		SalesTransaction ST, Car CA, Customer CU
+	  WHERE 	ST.VIN = CA.VIN
+	  AND		ST.custID = CU.custID
+	  AND 		CU.type = 'VIP'
+	  AND 		ST.agreedPrice < 50000)  R3,
+	  (SELECT NVL(SUM(amountPaid),0) AS ViewingPartyProfit
+	  FROM 		CarsViewed)  R4;
+	  
+SS:
+
+Total Profit
+------------
+      253700
+	  				
+
+--- OR ---
+
+SELECT (R1.nonVIPSales + R2.VIPAfterDiscount + R3.VIPNoDiscount + R4.ViewingPartyProfit) AS "Total Profit"		
+FROM 
+(SELECT NVL(SUM(ST.agreedPrice - CA.purchasedPrice),0) AS nonVIPSales
+ FROM 	SalesTransaction ST, Car CA, Customer CU
+ WHERE 	ST.VIN = CA.VIN
+ AND		ST.custID = CU.custID
+ AND 		CU.type = 'REGULAR')  R1,
+(SELECT NVL(SUM((ST.agreedPrice* 0.95 - CA.purchasedPrice)  ),0) AS VIPAfterDiscount
+	  FROM 		SalesTransaction ST, Car CA, Customer CU
+	  WHERE 	ST.VIN = CA.VIN
+	  AND		ST.custID = CU.custID
+	  AND 		CU.type = 'VIP'
+	  AND 		ST.agreedPrice >= 50000)  R2,
+	  (SELECT NVL(SUM(ST.agreedPrice - CA.purchasedPrice),0) AS VIPNoDiscount
+	  FROM 		SalesTransaction ST, Car CA, Customer CU
+	  WHERE 	ST.VIN = CA.VIN
+	  AND		ST.custID = CU.custID
+	  AND 		CU.type = 'VIP'
+	  AND 		ST.agreedPrice < 50000)  R3,
+	  (SELECT NVL(SUM(amountPaid),0) AS ViewingPartyProfit
+	  FROM 		CarsViewed)  R4;
+
+Total Profit
+------------
+      6250
+
+--(h)
+-- Display the average number of sales transactions per month.	
+
+SELECT R1.month, (r1.salescount/R2.years) AS "Average Number of Sales"
+FROM
+ 	(SELECT to_char(dateOfSale,'MON') AS month, COUNT(*) AS salescount
+	 FROM SalesTransaction
+	 GROUP BY to_char(dateOfSale,'MON')) R1,
+	(SELECT COUNT (DISTINCT to_char(dateOfSale,'yyyy')) AS years
+	 FROM SalesTransaction) R2;
+	 
+SS:
+
+MON Average Number of Sales
+--- -----------------------
+APR                     1.5
+AUG                       3
+DEC                      .5
+FEB                     3.5
+JAN                     2.5
+JUL                     5.5
+JUN                     2.5
+MAR                     3.5
+MAY                     4.5
+NOV                       1
+OCT                       3
+SEP                       2
+
+12 rows selected.
+ 
+	 
+--(i)
+-- Display the details (i.e. Manufacturer name, model name) of the cars that are in the top five in terms of highest mileage. Sort the result set in descending order. (Please note: Your solution must use a correlated subquery. The use of OLAP functions is not permissible). 	 
+
+-- Note to demonstrators: Students may find this query difficult since it requires a correlated subquery. 
+
+	-- A query is called a correlated subquery when both the inner query and the outer query are interdependent. For every row processed by the inner query, the outer query is processed as well. The inner query depends on the outer query before it can be processed.
+
+	-- The difference with an uncorrelated subquery is that the subquery can be run independently of the outer query. i.e. the subquery has no relationship with the outer query in an uncorrelated subquery.
+
+	-- It’s important to understand the order of operations in a correlated subquery. First, a row is processed in the outer query. Then, for that particular row the subquery is executed – so for each row processed by the outer query, the subquery will also be processed...which may lead to performance issues :)
+
+	-- It may be useful to illustrate this query on a whiteboard. Draw a list of values and iterate one row at a time and substitute in the appropriate values for each iteration of the subquery.
+
+	 
+SELECT	MU.name, MO.name, currentMileage
+FROM	Car C1, Model MO, Manufacturer MU
+WHERE	C1.modelNo = MO.modelNo
+AND 	MO.manufacturerID = MU.manufacturerID
+AND 	5 >= (
+			SELECT COUNT(currentMileage) 
+			FROM Car C2 
+			WHERE C1.currentMileage <= C2.currentMileage) 
+ORDER BY C1.currentMileage DESC; 
+
+SS:
+
+NAME                 NAME                 CURRENTMILEAGE
+-------------------- -------------------- --------------
+BMW                  Z3                           183000
+Toyota               Corolla                      179000
+Toyota               Supra                        161000
+Holden               VZ Commodore                 155000
+BMW                  X5 (E53)                     155000
+
+
+--Note: This can be verified by running the query: SELECT currentMileage FROM Car ORDER BY currentMileage DESC;
+
+	 
+-- (j)
+-- Display the most popular car model across all sales transactions and car viewing parties.
+
+SELECT modelName
+FROM (
+	    SELECT MO.name as modelName
+		FROM Model MO, Car C, SalesTransaction ST
+		WHERE MO.modelNo = C.modelNo
+		AND C.vin = ST.vin
+		UNION ALL
+		SELECT MO.name as modelName
+		FROM Model MO, Car C, CarsViewed CV
+		WHERE MO.modelNo = C.modelNo
+		AND C.vin = CV.vin) R1
+GROUP BY modelName
+HAVING COUNT(*) = (SELECT MAX(SUM(R2.total))
+				  FROM (
+						SELECT MO.name, COUNT(*) as total
+						FROM Model MO, Car C, SalesTransaction ST
+						WHERE MO.modelNo = C.modelNo
+						AND C.vin = ST.vin
+						GROUP BY MO.name
+						UNION ALL
+						SELECT MO.name, COUNT(*) as total
+						FROM Model MO, Car C, CarsViewed CV
+						WHERE MO.modelNo = C.modelNo
+						AND C.vin = CV.vin
+						GROUP BY MO.name) R2 
+					GROUP BY R2.name);
+					
+SS:
+
+MODELNAME
+--------------------
+350Z
