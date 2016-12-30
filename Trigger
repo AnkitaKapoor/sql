@@ -1,0 +1,85 @@
+--a)
+--A Trigger which automatically stores in a separate table called ‘ExcellentSale’ the Sales Agent name, car model and manufacturer name, each time the agreed price of a SalesTransaction is more than 20% of the car’s asking price. (Note: You need to create the ‘ExcellentSale’ table before implementing this trigger. To create the primary key, use a sequence that starts at 1 and increments by 1).
+
+CREATE SEQUENCE generateKey
+START WITH 1
+INCREMENT BY 1;
+
+CREATE TABLE ExcellentSale(
+recordNo NUMBER,
+agentName VARCHAR2(20) NOT NULL,
+modelName VARCHAR2(20) NOT NULL,
+manufacturerName VARCHAR2(20) NOT NULL,
+PRIMARY KEY(recordNo));
+
+CREATE OR REPLACE TRIGGER recordExcellentSale
+BEFORE INSERT ON SalesTransaction
+FOR EACH ROW
+
+DECLARE 
+	askingPrice INTEGER;
+	salesAgentName VARCHAR2(20);
+	modelName VARCHAR2(20);
+	manufacturerName VARCHAR2(20);
+
+BEGIN 		
+	SELECT 	C.askingPrice, SA.name, MO.name, MA.name		
+	INTO 	askingPrice, salesAgentName, modelName, manufacturerName	
+	FROM 	Car C, Model MO, Manufacturer MA, SalesAgent SA		
+	WHERE 	C.modelNo = MO.modelNo
+	AND 	MO.manufacturerID = MA.manufacturerID
+	AND 	C.vin = :new.vin
+	AND 	SA.agentID = :new.agentID;
+
+	IF :new.agreedPrice > (1.2 * askingPrice) THEN 
+	INSERT INTO ExcellentSale
+	VALUES(generateKey.nextval, salesAgentName, modelName, manufacturerName);
+	END IF;	
+
+END recordExcellentSale;
+/
+
+
+INSERT INTO SalesTransaction
+VALUES
+('WBADM6340XG841967', '1', '2', to_date('05-01-2014','dd-mm-yyyy'), 100000);
+
+SELECT * FROM ExcellentSale;
+
+
+
+--b)
+--A Trigger that is activated when a new UserAccount is accidentally associated with a non-VIP Customer.
+
+
+CREATE OR REPLACE TRIGGER VIPError
+BEFORE INSERT OR UPDATE ON UserAccount
+FOR EACH ROW 
+DECLARE 
+	errorCount INTEGER;
+
+BEGIN 		
+	SELECT 	COUNT(*) 		
+	INTO 	errorCount		
+	FROM 	Customer		
+	WHERE	custID = :new.custID
+	AND 	type = 'REGULAR';
+
+	IF errorCount > 0 THEN
+	RAISE_APPLICATION_ERROR(-20000, 'Customer ID: ' ||:new.custID || ' is not a VIP!'); 
+	END IF; 
+
+END VIPError; 
+/
+
+INSERT INTO UserAccount
+VALUES
+('1', to_date('05-01-2014','dd-mm-yyyy'));
+
+
+SS:            
+
+ERROR at line 1:
+ORA-20000: Customer ID: 1 is not a VIP!
+ORA-06512: at "MJ2ROMEO.VIPERROR", line 12
+ORA-04088: error during execution of trigger 'MJ2ROMEO.VIPERROR'
