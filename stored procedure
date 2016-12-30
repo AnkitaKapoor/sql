@@ -1,0 +1,132 @@
+--(a)
+-- Write a stored procedure that displays the contact details of viewing parties who haven't visited the dealership for over six months. For organisations, include the organisation name in the output. For international guests, include their country in the output.
+
+-- Note to demonstrators: To receive full marks, the use of two left outer joins is required. Using more cursors would be extremely inefficient and would not show a great understanding of set theory. This is due to the overlapping specialisation where we have four possible types of viewing party:
+		-- Viewing Party that is neither an organisation or international guest
+		-- Viewing Party that is an organisation but not an international guest
+		-- Viewing Party that is not an organisation but is an international guest
+		-- Viewing Party that is both an organisation and an international guest
+		
+-- The outer joins are required due to the attributes the query is projecting. NVL() improves the readability of the output.
+
+CREATE OR REPLACE PROCEDURE inactiveClients AS
+
+CURSOR inactiveVP IS
+	SELECT DISTINCT	VP.viewingPartyID, VP.contactNo, VP.email, NVL(O.name, '-') AS orgName, NVL(IG.country, '-') AS Country
+	FROM 			CarsViewed CV, ViewingParty VP, Organisation O, InternationalGuests IG
+	WHERE  			CV.viewingPartyID = VP.viewingPartyID
+	AND 			VP.viewingPartyID = O.viewingPartyID(+)
+	AND 			VP.viewingPartyID = IG.viewingPartyID(+)
+	AND 			months_between(SYSDATE, CV.dateViewed) > 6
+    AND 			VP.viewingPartyID NOT IN  
+										(SELECT viewingPartyID
+										 FROM CarsViewed
+										 WHERE months_between(SYSDATE, dateViewed) <= 6);
+BEGIN
+
+DBMS_OUTPUT.PUT_LINE('List of Viewing Parties who have not returned in over six months:');
+
+	FOR vp IN inactiveVP LOOP
+		DBMS_OUTPUT.PUT_LINE(CHR(10));
+		DBMS_OUTPUT.PUT_LINE('Viewing Party ID: '	 ||vp.viewingPartyID);
+		DBMS_OUTPUT.PUT_LINE('Organisation Name: '   ||vp.orgName);
+		DBMS_OUTPUT.PUT_LINE('Int. Guest Country: '  ||vp.country);
+		DBMS_OUTPUT.PUT_LINE('Contact Number: '      ||vp.contactNo);
+		DBMS_OUTPUT.PUT_LINE('Email: '               ||vp.email);
+		DBMS_OUTPUT.PUT_LINE(CHR(10));
+	END LOOP;
+	
+END inactiveClients;
+/
+
+EXECUTE inactiveClients;
+
+
+--(b)
+-- Write a stored procedure that accepts a particular year as input, and as output displays the number of cars sold grouped by the 3 mileage groups (Low Mileage: <50000km, Medium Mileage: >=50000km & <150000km, High Mileage: >=150000km). Also include the total number of cars sold in the result.
+
+CREATE OR REPLACE PROCEDURE carMileageGroup(specifiedYear IN VARCHAR)
+AS
+lowMileage 	number;
+medMileage	number;
+highMileage	number;
+BEGIN
+	
+	SELECT 	NVL(COUNT(*),0) 
+	INTO 	lowMileage
+	FROM 	Car C, SalesTransaction ST
+	WHERE 	C.VIN = ST.VIN
+	AND		C.currentMileage <50000
+	AND		to_char(ST.dateOfSale, 'YYYY') = specifiedYear;
+			
+	SELECT 	NVL(COUNT(*),0) 
+	INTO 	medMileage
+	FROM 	Car C, SalesTransaction ST
+	WHERE 	C.VIN = ST.VIN
+	AND		C.currentMileage >=50000 AND C.currentMileage <150000
+	AND		to_char(ST.dateOfSale, 'YYYY') = specifiedYear;
+	
+	SELECT 	NVL(COUNT(*),0) 
+	INTO 	highMileage
+	FROM 	Car C, SalesTransaction ST
+	WHERE 	C.VIN = ST.VIN
+	AND		C.currentMileage >=150000
+	AND		to_char(ST.dateOfSale, 'YYYY') = specifiedYear;
+	
+	
+	DBMS_OUTPUT.PUT_LINE('Low Mileage: '	||lowMileage);		
+	DBMS_OUTPUT.PUT_LINE('Medium Milage: '	||medMileage);
+	DBMS_OUTPUT.PUT_LINE('High Mileage: '	||highMileage);
+	DBMS_OUTPUT.PUT_LINE(CHR(10));
+	DBMS_OUTPUT.PUT_LINE('Total Sales in '	|| specifiedYear||': '||(lowMileage+medMileage+highMileage));
+END carMileageGroup;
+/
+
+EXECUTE carMileageGroup('2014');   
+
+SS:
+
+Low Mileage: 17
+Medium Milage: 9
+High Mileage: 0
+
+
+Total Sales in 2014: 26
+
+PL/SQL procedure successfully completed.
+
+
+--(c)
+-- Write a stored function that uses a senior agent’s ID as input and calculates the total commission owed to date for that agent. You also need to show an SQL statement to display the total amount of commission (i.e. the sum) owed to all of the senior agents in the database. (Please refer to the case study for a description of the commission policy).
+
+
+
+CREATE OR REPLACE FUNCTION calcSenAgentComm (id SeniorAgent.agentID%type)
+	RETURN NUMBER IS
+	commissionPayment	number(10,2);
+BEGIN
+	
+	SELECT NVL(SUM((ST.agreedPrice - C.askingPrice) * (trunc((months_between(ST.dateOfSale, SEN.yearPromoted)) / 12) / 100)), 0) 
+	INTO 	commissionPayment
+	FROM   	SalesTransaction ST, SalesAgent SA, SeniorAgent SEN, Car C
+	WHERE  	ST.agentID = id
+	AND 	ST.agentID = SA.agentID
+	AND 	SA.agentID = SEN.agentID
+	AND 	ST.vin = C.vin
+	AND 	(ST.agreedPrice - C.askingPrice) >0
+	GROUP BY SEN.agentID;
+	
+	RETURN commissionPayment;
+END;
+/
+
+
+SELECT SUM(calcSenAgentComm(agentID)) AS TotalPayment
+FROM SeniorAgent;
+
+SS:
+
+
+TOTALPAYMENT
+------------
+        1625
